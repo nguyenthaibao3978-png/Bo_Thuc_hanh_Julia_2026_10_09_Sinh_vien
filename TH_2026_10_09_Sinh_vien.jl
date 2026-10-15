@@ -137,48 +137,43 @@ end
 
 # Chương 2: trộn hai dãy đã có thứ tự. Không gọi sort/sort! trong thuật toán.
 function merge_sort(a::AbstractVector, before::Function)
-    if length(a) <= 1
+    # TODO 1: chia đôi, đệ quy hai nửa, trộn theo before. Không gọi sort/sort!.
+    # Giữ thứ tự ban đầu khi hai phần tử không đứng trước nhau.
+    n = length(a)
+    if n <= 1
         return copy(a)
     end
     
-    mid = div(length(a), 2)
+    mid = div(n, 2)
     left = merge_sort(a[1:mid], before)
     right = merge_sort(a[mid+1:end], before)
     
-    result = Vector{eltype(a)}()
-    sizehint!(result, length(a))
+    # Trộn hai mảng đã sắp xếp
+    res = similar(a, 0)
     i, j = 1, 1
-    
     while i <= length(left) && j <= length(right)
-        if before(left[i], right[j])
-            push!(result, left[i])
-            i += 1
-        else
-            push!(result, right[j])
+        if before(right[j], left[i])
+            push!(res, right[j])
             j += 1
+        else
+            push!(res, left[i])
+            i += 1
         end
     end
-    
-    while i <= length(left)
-        push!(result, left[i])
-        i += 1
-    end
-    while j <= length(right)
-        push!(result, right[j])
-        j += 1
-    end
-    
-    return result
+    append!(res, left[i:end])
+    append!(res, right[j:end])
+    return res
 end
 
-
-
-function binary_search(a::Vector{Order}, id::Int)
+function binary_search(a::Vector{Order},id::Int)
+    # TODO 2: thu hẹp đoạn [lo,hi] bằng chỉ số giữa. ID đầu vào đã tăng dần.
+    # Tìm thấy: trả Order; không tìm thấy: trả nothing.
     lo = 1
     hi = length(a)
-    
+
     while lo <= hi
         mid = lo + div(hi - lo, 2)
+
         if a[mid].id == id
             return a[mid]
         elseif a[mid].id < id
@@ -187,9 +182,9 @@ function binary_search(a::Vector{Order}, id::Int)
             hi = mid - 1
         end
     end
+
     return nothing
 end
-
 
 # Chương 1: đệ quy cộng lợi ích trên dãy ID, mỗi lời gọi giảm số phần tử.
 function recursive_benefit(ids,by_id,lo=1,hi=length(ids))
@@ -278,18 +273,28 @@ function dfs_reachable(graph,source=1)
     visit(source)
     seen
 end
-function bfs_routes(graph, source=1)
-    n = length(graph)
+function bfs_routes(graph,source=1)
+    # TODO 3: dùng CircularQueue, đánh dấu distance khi đưa đỉnh vào hàng đợi.
+    # Trả (distance=...,parent=...,routes=...); -1 nghĩa là chưa tới.
+   n = length(graph)
+    1 <= source <= n ||
+        throw(ArgumentError("Đỉnh xuất phát không hợp lệ."))
+
     distance = fill(-1, n)
-    parent = fill(0, n)
-    
-    q = CircularQueue(n + 5)
+    parent = zeros(Int, n)
+    routes = [Int[] for _ in 1:n]
+
+    q = CircularQueue(n)
+
+    # Khởi tạo BFS
     distance[source] = 0
     enqueue!(q, source)
-    
+
     while q.count > 0
         u = dequeue!(q)
+
         for v in graph[u]
+            # Chỉ thăm đỉnh chưa được phát hiện
             if distance[v] == -1
                 distance[v] = distance[u] + 1
                 parent[v] = u
@@ -297,25 +302,33 @@ function bfs_routes(graph, source=1)
             end
         end
     end
-    
-    routes = Vector{Vector{Int}}(undef, n)
-    for i in 1:n
-        if distance[i] == -1
-            routes[i] = Int[]
-        else
-            path = Int[]
-            curr = i
-            while curr != 0
-                push!(path, curr)
-                curr = parent[curr]
-            end
-            routes[i] = reverse(path)
-        end
-    end
-    
-    return (distance=distance, parent=parent, routes=routes)
-end
 
+    # Khôi phục đường đi từ source đến từng đỉnh
+    for v in 1:n
+        if distance[v] == -1
+            continue
+        end
+
+        path = Int[]
+        current = v
+
+        while current != 0
+            push!(path, current)
+            current == source && break
+            current = parent[current]
+        end
+
+        reverse!(path)
+        routes[v] = path
+    end
+
+    return (
+        distance = distance,
+        parent = parent,
+        routes = routes
+    )
+
+end
 
 # Chương 3: thử mọi tập con để đối chiếu, chỉ dùng cho n nhỏ.
 function brute_force(orders,costs,budget)
@@ -339,46 +352,66 @@ end
 
 # Chương 4: DP[i+1,b+1] = lợi ích tốt nhất của i đơn đầu trong ngân sách b.
 # Khi hai phương án bằng lợi ích, giữ phương án không lấy đơn đang xét.
-function knapsack(orders, costs, budget)
+function knapsack(orders,costs,budget)
+    # TODO 4: table[i+1,b+1] là lợi ích tốt nhất của i đơn đầu/ngân sách b.
+    # Đơn chỉ chọn một lần; truy vết để trả ids,value,cost,table.
+    # Khi bằng lợi ích, giữ phương án không lấy đơn đang xét.
+    budget >= 0 ||
+        throw(ArgumentError("Ngân sách không được âm."))
+
     n = length(orders)
+
+    # table[i+1, b+1]: lợi ích tối đa của i đơn đầu
+    # với ngân sách b
     table = zeros(Int, n + 1, budget + 1)
-    
+
+    # Xây dựng bảng quy hoạch động
     for i in 1:n
         o = orders[i]
         c = costs[o.id]
-        b_val = o.benefit
-        for w in 0:budget
-            if c <= w
-                # Khi bằng lợi ích, ưu tiên phương án KHÔNG lấy đơn đang xét (giữ table[i, w+1])
-                if table[i, w+1] >= table[i, w - c + 1] + b_val
-                    table[i+1, w+1] = table[i, w+1]
-                else
-                    table[i+1, w+1] = table[i, w - c + 1] + b_val
+        value = o.benefit
+
+        for b in 0:budget
+            # Mặc định: không lấy đơn i
+            table[i+1, b+1] = table[i, b+1]
+
+            # Thử lấy đơn i nếu đủ ngân sách
+            if c <= b
+                candidate = table[i, b-c+1] + value
+
+                # Chỉ lấy nếu lợi ích lớn hơn
+                # Nếu bằng nhau thì giữ phương án không lấy
+                if candidate > table[i+1, b+1]
+                    table[i+1, b+1] = candidate
                 end
-            else
-                table[i+1, w+1] = table[i, w+1]
             end
         end
     end
-    
-    # Truy vết tìm danh sách ID được chọn
-    selected_ids = Int[]
-    w = budget
+
+    # Truy vết để tìm các đơn được chọn
+    ids = Int[]
+    b = budget
+
     for i in n:-1:1
-        o = orders[i]
-        c = costs[o.id]
-        # Nếu giá trị khác nhau tức là đơn i đã được chọn
-        if table[i+1, w+1] != table[i, w+1]
-            push!(selected_ids, o.id)
-            w -= c
+        # Nếu giá trị khác hàng trên, đơn i đã được lấy
+        if table[i+1, b+1] != table[i, b+1]
+            o = orders[i]
+            push!(ids, o.id)
+            b -= costs[o.id]
         end
     end
-    reverse!(selected_ids)
-    
-    value = table[n+1, budget+1]
-    cost = sum((costs[id] for id in selected_ids); init=0)
-    
-    return (ids=selected_ids, value=value, cost=cost, table=table)
+
+    reverse!(ids)
+
+    total_cost = sum((costs[id] for id in ids); init=0)
+    total_value = table[n+1, budget+1]
+
+    return (
+        ids = ids,
+        value = total_value,
+        cost = total_cost,
+        table = table
+    )
 end
 
 
@@ -608,18 +641,18 @@ function run_menu(mssv;root=joinpath(@__DIR__,"data"),overwrite=false)
 end
 
 """Hồ sơ ba đơn mẫu; các tham số MSSV gốc vẫn dùng cho phần mở rộng."""
-mini_profile() = merge(profile("MINI001"),(budget=8,tie=0,trace_id=1,n=3))
+mini_profile() = merge(profile("N24DCDT005"),(budget=8,tie=0,trace_id=1,n=3))
 
 """Tạo đúng hai CSV mẫu. Chỉ ghi đè nếu overwrite=true."""
 function mini_data(;root=joinpath(@__DIR__,"data"),overwrite=false)
-    folder = joinpath(root,"MINI001")
+    folder = joinpath(root,"N24DCDT005")
     paths = [joinpath(folder,"don_hang.csv"),joinpath(folder,"ban_do.csv")]
     if any(isfile,paths) && !overwrite
         all(isfile,paths) || throw(ArgumentError("CSV mẫu chưa đầy đủ. Không tự ghi đè."))
         data = read_data(folder)
         [(o.id,o.destination,o.service,o.benefit) for o in data.orders] ==
             [(1,2,1,6),(2,4,1,8),(3,6,1,10)] && data.edges == FIXED_EDGES ||
-            throw(ArgumentError("MINI001 phải giữ đúng dữ liệu mẫu; dùng MSSV cho dữ liệu cá nhân."))
+            throw(ArgumentError("N24DCDT005 phải giữ đúng dữ liệu mẫu; dùng MSSV cho dữ liệu cá nhân."))
         return folder
     end
     write_data(folder,[Order(1,2,1,6),Order(2,4,1,8),Order(3,6,1,10)],FIXED_EDGES)
@@ -631,7 +664,7 @@ function run_mini(;root=joinpath(@__DIR__,"data"),overwrite=false)
     data = read_data(folder)
     s = build_session(data.orders,data.edges,mini_profile())
     r = plan!(s)
-    println("MINI001 | Ngân sách 8 | DP $(r.optimal.value) | Vét cạn $(r.oracle.value)")
+    println("N24DCDT005 | Ngân sách 8 | DP $(r.optimal.value) | Vét cạn $(r.oracle.value)")
     show_session(s)
     show_action(s,deliver!(s),"Giao")
     show_action(s,undo!(s),"Hoàn tác")
